@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#02030a">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <link rel="manifest" href="manifest.json">
-<title>Vishwaroop Sky</title>
+<title>Sky Cam</title>
 <style>
   :root { --gold: #f3c76b; --ink: #02030a; }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -44,17 +44,25 @@
   #gear { position: fixed; top: calc(10px + env(safe-area-inset-top)); right: 10px; z-index: 3; }
   #hint { position: fixed; top: calc(14px + env(safe-area-inset-top)); left: 14px; z-index: 3; font-size: 12px;
     opacity: .75; max-width: 60vw; text-shadow: 0 1px 3px #000; }
-  #presets { position: fixed; left: 0; right: 0; bottom: calc(112px + env(safe-area-inset-bottom)); z-index: 3;
+  #presets { position: fixed; left: 0; right: 0; bottom: calc(128px + env(safe-area-inset-bottom)); z-index: 3;
     display: flex; gap: 10px; overflow-x: auto; padding: 0 14px; scrollbar-width: none; }
   #presets::-webkit-scrollbar { display: none; }
   #presets button { flex: 0 0 auto; width: 66px; padding: 0; border: 0; background: none; color: #f6ead0;
     font-size: 11px; display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; opacity: .75; }
+  .cap { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 11px; text-shadow: 0 1px 3px #000; }
+  #photoBtn::before { content: '🖼'; } #photoCap::before { content: 'Edit photo'; }
+  #photoBtn.camera::before { content: '📷'; } #photoBtn.camera + #photoCap::before { content: 'Camera'; }
+  #presets .add { flex: 0 0 auto; width: 66px; display: flex; flex-direction: column; align-items: center; gap: 4px;
+    font-size: 11px; cursor: pointer; }
+  #presets .plus { width: 54px; height: 54px; border-radius: 50%; border: 2px dashed var(--gold); display: grid;
+    place-items: center; font-size: 28px; color: var(--gold); background: rgba(0,0,0,.45); }
+  #presets .add span:last-of-type { text-shadow: 0 1px 3px #000; }
   #presets button img, #presets .drawn { width: 54px; height: 54px; border-radius: 50%; object-fit: cover;
     border: 2px solid rgba(255,255,255,.35); display: grid; place-items: center; background: #0a0b1a; font-size: 22px; color: var(--gold); }
   #presets button.on { opacity: 1; }
   #presets button.on img, #presets button.on .drawn { border-color: var(--gold); box-shadow: 0 0 12px rgba(243,199,107,.8); }
   #presets button span { text-shadow: 0 1px 3px #000; white-space: nowrap; }
-  #toast { position: fixed; left: 50%; bottom: 130px; transform: translateX(-50%); z-index: 6; display: none;
+  #toast { position: fixed; left: 50%; bottom: calc(230px + env(safe-area-inset-bottom)); max-width: 80vw; text-align: center; transform: translateX(-50%); z-index: 6; display: none;
     background: rgba(0,0,0,.75); padding: 8px 16px; border-radius: 999px; font-size: 13px; }
 </style>
 </head>
@@ -63,38 +71,35 @@
 <video id="video" playsinline muted></video>
 
 <div id="start">
-  <h1>Vishwaroop Sky</h1>
-  <p>Point at the open sky. The cosmos, and Vishnu in his universal form, appear behind the world.</p>
+  <h1>Sky Cam</h1>
+  <p>Point your camera at the open sky, then pick a new sky from the row at the bottom. Buildings and trees stay in front.</p>
   <button class="btn primary" id="startCam">Open camera</button>
-  <button class="btn" id="startPhoto">Use a photo</button>
+  <button class="btn" id="startPhoto">Edit a photo from gallery</button>
 </div>
 
 <div id="hint">Drag to move · pinch to resize</div>
 <button class="round" id="gear" title="Settings">⚙</button>
 <div id="panel">
-  <label>Cosmos strength</label><input id="intensity" type="range" min="0" max="1" step="0.01" value="0.95">
-  <label>Vishnu size</label><input id="size" type="range" min="0.4" max="2.4" step="0.01" value="0.9">
+  <label>Sky strength</label><input id="intensity" type="range" min="0" max="1" step="0.01" value="0.95">
+  <label>Black hole / figure size</label><input id="size" type="range" min="0.4" max="2.4" step="0.01" value="0.9">
   <label>Glow</label><input id="glow" type="range" min="0" max="1" step="0.01" value="0.7">
-  <div class="row"><span>Gargantua halo</span><input id="halo" type="checkbox" checked></div>
-  <div class="row"><span>Vishnu figure</span><input id="figure" type="checkbox" checked></div>
+  <div class="row"><span>Black hole</span><input id="halo" type="checkbox" checked></div>
   <div class="row"><span>Golden embers</span><input id="embers" type="checkbox" checked></div>
-  <div class="row"><span>Show sky mask</span><input id="showMask" type="checkbox"></div>
-  <button class="btn" id="pickArt">Load sky art</button>
-  <button class="btn" id="clearArt">Clear sky art</button>
-  <button class="btn" id="pickDeity">Load Vishnu image</button>
+  <div class="row"><span>Show detected sky</span><input id="showMask" type="checkbox"></div>
 </div>
 
-<div id="presets"></div>
+<div id="presets">
+  <label class="add" title="Add your own sky"><span class="plus">+</span><span>Your sky</span>
+    <input type="file" id="skyInput" accept="image/*" hidden></label>
+</div>
 <div id="bar">
-  <button class="round" id="photoBtn" title="Open a photo">🖼</button>
+  <div class="cap"><button class="round" id="photoBtn" title="Edit a photo from gallery"></button><span id="photoCap"></span></div>
   <button id="shutter" title="Capture"></button>
-  <button class="round" id="flipBtn" title="Switch camera">⟲</button>
+  <div class="cap"><button class="round" id="flipBtn" title="Switch camera">⟲</button><span>Flip</span></div>
 </div>
 <div id="toast"></div>
 
 <input type="file" id="photoInput" accept="image/*" hidden>
-<input type="file" id="deityInput" accept="image/*" hidden>
-<input type="file" id="artInput" accept="image/*" hidden>
 <script src="app.js"></script>
 </body>
 </html>

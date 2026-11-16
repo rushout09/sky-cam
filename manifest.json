@@ -1,6 +1,6 @@
 {
-  "name": "Vishwaroop Sky",
-  "short_name": "Vishwaroop",
+  "name": "Sky Cam",
+  "short_name": "Sky Cam",
   "start_url": ".",
   "display": "fullscreen",
   "orientation": "any",

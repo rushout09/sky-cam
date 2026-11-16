@@ -43,6 +43,33 @@ PROMPTS = {
         "immense like a constellation across the sky. Subject in the upper two thirds. Vertical. " + STYLE),
 }
 
+SKY_STYLE = ("Breathtaking cinematic sky, vertical frame, ultra detailed, no text, no watermark, no signature. "
+             "Only sky: no ground, buildings, trees, mountains, water or horizon anywhere in the frame. "
+             "The main subject sits in the upper two thirds; the bottom third is softer open sky, because "
+             "this image will be placed behind a real city skyline.")
+
+PROMPTS.update({
+    "sky-blackhole": "A supermassive black hole like Gargantua from Interstellar dominating the sky, a blazing golden "
+        "accretion disc crossing in front, a gravitationally lensed ring of light arching over it, a rich star field. " + SKY_STYLE,
+    "sky-milkyway": "The Milky Way galactic core arching across a deep night sky, dense star clouds and dark dust "
+        "lanes, faint green airglow, sharp astrophotography. " + SKY_STYLE,
+    "sky-aurora": "Vivid green and violet aurora borealis curtains rippling across a starry night sky. " + SKY_STYLE,
+    "sky-ringed-planet": "A gigantic ringed gas giant planet looming huge and close in a twilight sky, its rings "
+        "slicing across the sky, a few stars, soft atmospheric haze. " + SKY_STYLE,
+    "sky-two-moons": "An alien sky with two enormous moons, one pale blue and one copper, a dusky violet and teal "
+        "gradient, wisps of cloud, stars. " + SKY_STYLE,
+    "sky-nebula": "A colourful nebula of magenta, teal and gold gas clouds with bright young stars, deep space "
+        "telescope image. " + SKY_STYLE,
+    "sky-anime-sunset": "Hand-painted anime film style summer sky at golden hour, towering cumulus clouds lit pink "
+        "and orange, soft light rays, vibrant and nostalgic. " + SKY_STYLE,
+    "sky-starry-night": "A night sky painted in the style of Van Gogh's The Starry Night, swirling blue and yellow "
+        "brushstrokes, glowing crescent moon and stars, thick impasto. " + SKY_STYLE,
+    "sky-storm": "A dramatic supercell thunderstorm sky with forked lightning, dark turquoise and purple clouds, "
+        "mammatus clouds. " + SKY_STYLE,
+    "sky-pastel": "A dreamy pastel cotton-candy sky, pink, lavender and peach clouds, a soft glowing sun, a few "
+        "early stars. " + SKY_STYLE,
+})
+
 def generate(name):
     body = {"contents": [{"parts": [{"text": PROMPTS[name]}]}],
             "generationConfig": {"responseModalities": ["IMAGE"],
@@ -68,6 +95,6 @@ def generate(name):
 if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)
     names = sys.argv[1:] or list(PROMPTS)
-    with ThreadPoolExecutor(6) as ex:
+    with ThreadPoolExecutor(10) as ex:
         for line in ex.map(generate, names):
             print(line, flush=True)
