@@ -7,7 +7,8 @@ const view = $('#view');
 const vctx = view.getContext('2d');
 const video = $('#video');
 
-const settings = { intensity: 0.95, size: 0.9, glow: 0.7, halo: true, showMask: false, x: 0.5, y: 0.97 };
+const settings = { intensity: 0.95, size: 0.9, glow: 0.7, halo: true, showMask: false, x: 0.5, y: 0.97,
+  figure: true, embers: true, artX: 0.5, artY: 0.12, artScale: 1 };
 
 let source = null;          // { el, w, h, still }
 let facing = 'environment';
@@ -22,6 +23,8 @@ const sampler = makeCanvas(1, 1);
 const sctx = sampler.getContext('2d', { willReadFrequently: true });
 const maskCanvas = makeCanvas(1, 1);
 const mctx = maskCanvas.getContext('2d');
+const darkMask = makeCanvas(1, 1);
+const dctx = darkMask.getContext('2d');
 const cosmos = makeCanvas(1, 1);
 const cctx = cosmos.getContext('2d');
 
@@ -75,8 +78,7 @@ function computeSkyMask(el, sw, sh, still) {
   }
 
   // close small holes (birds, wires, thin branches): dilate then erode
-  // then erode once more so the cosmos never bleeds over rooftops
-  const closed = morph(morph(morph(mask, mw, mh, true), mw, mh, false), mw, mh, false);
+  const closed = morph(morph(mask, mw, mh, true), mw, mh, false);
 
   // soften
   let f = new Float32Array(n);
@@ -95,6 +97,10 @@ function computeSkyMask(el, sw, sh, still) {
     img.data[p + 3] = Math.min(255, f[i] * 270);
   }
   mctx.putImageData(img, 0, 0);
+  // a dark copy of the mask, laid over the old sky so its bright blue cannot fringe the rooftops
+  if (darkMask.width !== mw || darkMask.height !== mh) { darkMask.width = mw; darkMask.height = mh; }
+  dctx.globalCompositeOperation = 'source-over'; dctx.clearRect(0, 0, mw, mh); dctx.drawImage(maskCanvas, 0, 0);
+  dctx.globalCompositeOperation = 'source-in'; dctx.fillStyle = '#060912'; dctx.fillRect(0, 0, mw, mh);
 }
 
 function morph(m, w, h, grow) {
@@ -151,7 +157,8 @@ function buildNebula() {
   const S = 512, c = makeCanvas(S, S), x = c.getContext('2d');
   const img = x.createImageData(S, S);
   const n1 = valueNoise(7), n2 = valueNoise(91), n3 = valueNoise(333);
-  const pal = [[6, 10, 34], [18, 64, 104], [74, 30, 98], [214, 150, 70]];
+  // deep ocean teal against amber cosmic gas, as in the Ksheer Sagar references
+  const pal = [[3, 9, 18], [14, 64, 84], [132, 76, 26], [255, 200, 116]];
   for (let y = 0; y < S; y++) for (let xx = 0; xx < S; xx++) {
     const u = xx / S * 4, v = y / S * 4;
     const w = fbm(n3, u * 0.7, v * 0.7, 3) * 2.2;                      // domain warp
@@ -183,20 +190,101 @@ function buildStars(W, H) {
     stars.push({ x: rnd() * W, y: rnd() * H, r: big ? 1.2 + rnd() * 1.6 : 0.4 + rnd() * 0.8,
       a: 0.35 + rnd() * 0.65, f: 0.6 + rnd() * 2.5, p: rnd() * 6.28, warm: rnd() < 0.25, big });
   }
+  // golden embers and petals drifting upward
+  embers = [];
+  const ec = Math.round(W * H / 11000);
+  for (let i = 0; i < ec; i++) {
+    embers.push({ x: rnd() * W, y: rnd() * H, r: (0.8 + rnd() * 2.6) * Math.max(1, W / 1200),
+      v: 0.008 + rnd() * 0.03, amp: 6 + rnd() * 22, f: 0.2 + rnd() * 0.8, p: rnd() * 6.28, a: 0.4 + rnd() * 0.6 });
+  }
+}
+let embers = [];
+
+function drawEmbers(c, W, H, t) {
+  c.globalCompositeOperation = 'screen';
+  for (const e of embers) {
+    const y = ((e.y - t * e.v * H) % H + H) % H;
+    const x = e.x + Math.sin(t * e.f + e.p) * e.amp;
+    const fl = e.a * (0.65 + 0.35 * Math.sin(t * 3 * e.f + e.p));
+    c.globalAlpha = fl * 0.25; c.fillStyle = '#ff9a2e';
+    c.beginPath(); c.arc(x, y, e.r * 3.2, 0, Math.PI * 2); c.fill();
+    c.globalAlpha = fl; c.fillStyle = '#ffd27a';
+    c.beginPath(); c.arc(x, y, e.r, 0, Math.PI * 2); c.fill();
+  }
+  c.globalAlpha = 1; c.globalCompositeOperation = 'source-over';
+}
+
+function drawPlanets(c, W, H, lx, ly) {
+  const m = Math.min(W, H);
+  for (const [fx, fy, fr, col] of [[0.16, 0.3, 0.05, ['#9fb3c4', '#3b4a58']], [0.84, 0.2, 0.028, ['#d9b48a', '#5a3b22']]]) {
+    const x = W * fx, y = H * fy, r = m * fr;
+    const a = Math.atan2(ly - y, lx - x);
+    const g = c.createRadialGradient(x + Math.cos(a) * r * 0.5, y + Math.sin(a) * r * 0.5, r * 0.1, x, y, r);
+    g.addColorStop(0, col[0]); g.addColorStop(0.7, col[1]); g.addColorStop(1, '#05070c');
+    c.fillStyle = g; c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.fill();
+    c.globalCompositeOperation = 'screen'; c.strokeStyle = 'rgba(255,200,120,.35)'; c.lineWidth = Math.max(1, r * 0.06);
+    c.beginPath(); c.arc(x, y, r, a - 1.1, a + 1.1); c.stroke();
+    c.globalCompositeOperation = 'source-over';
+  }
+}
+
+// ---------- sky art: any picture the user loads becomes the sky ----------
+let skyArt = null;          // { canvas, tint }
+function prepareSkyArt(im) {
+  const max = 2400, w0 = im.naturalWidth || im.width, h0 = im.naturalHeight || im.height;
+  const sc = Math.min(1, max / Math.max(w0, h0));
+  const c = makeCanvas(Math.round(w0 * sc), Math.round(h0 * sc));
+  c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+  // average colour, used to grade the real world so it sits under this sky
+  const t = makeCanvas(8, 8), tx = t.getContext('2d', { willReadFrequently: true });
+  tx.drawImage(c, 0, 0, 8, 8);
+  const d = tx.getImageData(0, 0, 8, 8).data, avg = [0, 0, 0];
+  for (let p = 0; p < d.length; p += 4) for (let k = 0; k < 3; k++) avg[k] += d[p + k] / 64;
+  const mx = Math.max(...avg, 1);
+  const tint = `rgb(${avg.map(v => Math.round(150 + 105 * v / mx)).join(',')})`;
+  const blur = makeCanvas(24, Math.max(1, Math.round(24 * c.height / c.width)));
+  blur.getContext('2d').drawImage(c, 0, 0, blur.width, blur.height);
+  return { canvas: c, tint, blur };
+}
+
+// Cover the frame, but never zoom a tall painting past 1.7x the frame height on a wide frame:
+// past that, fit it and fill the sides with a blurred copy. artX/artY pick which part shows (0..1).
+function skyArtRect(W, H) {
+  const a = skyArt.canvas;
+  const cover = Math.max(W / a.width, H / a.height);
+  const s = Math.min(cover, 1.7 * H / a.height) * settings.artScale;
+  const w = a.width * s, h = a.height * s;
+  return { x: (W - w) * settings.artX, y: (H - h) * settings.artY, w, h };
+}
+
+function drawSkyArt(c, W, H) {
+  const r = skyArtRect(W, H);
+  if (r.w < W || r.h < H) {
+    const b = skyArt.blur, s = Math.max(W / b.width, H / b.height);
+    c.imageSmoothingEnabled = true;
+    c.drawImage(b, (W - b.width * s) / 2, (H - b.height * s) / 2, b.width * s, b.height * s);
+  }
+  c.drawImage(skyArt.canvas, r.x, r.y, r.w, r.h);
 }
 
 const nebula = buildNebula();
 
 // ---------- built-in Vishwaroop figure (placeholder until real art is loaded) ----------
+// Blue skin, gold ornaments, yellow pitambar, many arms fanned like the universal form.
 function buildFigure() {
-  const W = 1000, H = 1400, c = makeCanvas(W, H), x = c.getContext('2d');
-  const shape = makeCanvas(W, H), s = shape.getContext('2d');
-  s.lineCap = 'round'; s.lineJoin = 'round';
-  s.fillStyle = s.strokeStyle = '#fff';
-  const cx = 500, shY = 450;
+  const W = 1000, H = 1400, cx = 500, shY = 450;
+  const layer = (draw, stops) => {
+    const L = makeCanvas(W, H), l = L.getContext('2d');
+    l.lineCap = 'round'; l.lineJoin = 'round'; l.fillStyle = l.strokeStyle = '#fff';
+    draw(l);
+    l.globalCompositeOperation = 'source-in';
+    const g = l.createLinearGradient(0, 0, 0, H);
+    for (const [o, col] of stops) g.addColorStop(o, col);
+    l.fillStyle = g; l.fillRect(0, 0, W, H);
+    return L;
+  };
 
-  // arms, fanned like the universal form; 9 per side
-  const symbols = [];
+  const arms = [];
   for (const side of [-1, 1]) {
     const N = 9;
     for (let k = 0; k < N; k++) {
@@ -206,57 +294,76 @@ function buildFigure() {
       const sx = cx + side * 105, sy = shY + 10 + t * 30;
       const ex = sx + side * Math.cos(a1) * 175, ey = sy + Math.sin(a1) * 175;
       const hx = ex + side * Math.cos(a2) * 150, hy = ey + Math.sin(a2) * 150;
-      s.globalAlpha = 0.55 + 0.45 * (k === 2 || k === 6 ? 1 : 0.6);
-      s.lineWidth = 30 - t * 4;
-      s.beginPath(); s.moveTo(sx, sy); s.lineTo(ex, ey); s.stroke();
-      s.lineWidth = 24 - t * 4;
-      s.beginPath(); s.moveTo(ex, ey); s.lineTo(hx, hy); s.stroke();
-      s.beginPath(); s.arc(hx, hy, 15, 0, Math.PI * 2); s.fill();
-      if (k === 2) symbols.push({ kind: side > 0 ? 'chakra' : 'shankha', x: hx, y: hy - 30 });
-      if (k === 6) symbols.push({ kind: side > 0 ? 'padma' : 'gada', x: hx, y: hy - 20 });
+      arms.push({ side, k, t, sx, sy, ex, ey, hx, hy, main: k === 2 || k === 6 });
     }
   }
-  s.globalAlpha = 1;
 
-  // torso and dhoti, fading into the horizon
-  s.beginPath();
-  s.moveTo(cx - 110, shY); s.quadraticCurveTo(cx, shY - 40, cx + 110, shY);
-  s.quadraticCurveTo(cx + 95, 600, cx + 70, 720);
-  s.quadraticCurveTo(cx + 190, 1050, cx + 210, H);
-  s.lineTo(cx - 210, H);
-  s.quadraticCurveTo(cx - 190, 1050, cx - 70, 720);
-  s.quadraticCurveTo(cx - 95, 600, cx - 110, shY);
-  s.fill();
-  s.fillRect(cx - 32, 340, 64, 100);                          // neck
-  s.beginPath(); s.ellipse(cx, 300, 64, 78, 0, 0, Math.PI * 2); s.fill(); // head
-  // kireeta mukuta (tall crown)
-  s.beginPath();
-  s.moveTo(cx - 72, 262); s.lineTo(cx + 72, 262); s.lineTo(cx + 52, 150); s.lineTo(cx + 30, 70);
-  s.lineTo(cx, 20); s.lineTo(cx - 30, 70); s.lineTo(cx - 52, 150); s.closePath(); s.fill();
+  const skin = layer(s => {
+    for (const a of arms) {
+      s.globalAlpha = a.main ? 1 : 0.82;
+      s.lineWidth = 30 - a.t * 4; s.beginPath(); s.moveTo(a.sx, a.sy); s.lineTo(a.ex, a.ey); s.stroke();
+      s.lineWidth = 24 - a.t * 4; s.beginPath(); s.moveTo(a.ex, a.ey); s.lineTo(a.hx, a.hy); s.stroke();
+      s.beginPath(); s.arc(a.hx, a.hy, 15, 0, Math.PI * 2); s.fill();
+    }
+    s.globalAlpha = 1;
+    s.beginPath();
+    s.moveTo(cx - 110, shY); s.quadraticCurveTo(cx, shY - 40, cx + 110, shY);
+    s.quadraticCurveTo(cx + 95, 600, cx + 72, 740); s.lineTo(cx - 72, 740);
+    s.quadraticCurveTo(cx - 95, 600, cx - 110, shY); s.fill();
+    s.fillRect(cx - 32, 340, 64, 100);
+    s.beginPath(); s.ellipse(cx, 300, 64, 78, 0, 0, Math.PI * 2); s.fill();
+  }, [[0, '#a9c4ff'], [0.25, '#5b86e6'], [0.5, '#2f56b8'], [0.8, '#1d357f']]);
 
-  // colour the silhouette gold, fading at the bottom
-  s.globalCompositeOperation = 'source-in';
-  const g = s.createLinearGradient(0, 0, 0, H);
-  g.addColorStop(0, '#fff3cf'); g.addColorStop(0.3, '#f2c062'); g.addColorStop(0.65, '#b8741f');
-  g.addColorStop(1, 'rgba(120,60,20,0)');
-  s.fillStyle = g; s.fillRect(0, 0, W, H);
-  s.globalCompositeOperation = 'source-over';
+  const cloth = layer(s => {
+    s.beginPath();
+    s.moveTo(cx - 80, 700); s.lineTo(cx + 80, 700);
+    s.quadraticCurveTo(cx + 190, 1050, cx + 215, H); s.lineTo(cx - 215, H);
+    s.quadraticCurveTo(cx - 190, 1050, cx - 80, 700); s.fill();
+    // angavastram sweeping over the shoulders
+    s.lineWidth = 26; s.globalAlpha = 0.9;
+    s.beginPath(); s.moveTo(cx - 120, shY + 5); s.bezierCurveTo(cx - 260, 620, cx - 190, 820, cx - 300, 980); s.stroke();
+    s.beginPath(); s.moveTo(cx + 120, shY + 5); s.bezierCurveTo(cx + 260, 620, cx + 190, 820, cx + 300, 980); s.stroke();
+  }, [[0.45, '#ffe07a'], [0.65, '#e9b21f'], [0.85, '#b57a0c'], [1, 'rgba(120,70,10,0)']]);
 
-  // ornaments: necklaces, armbands, urdhva pundra
-  s.strokeStyle = 'rgba(255,250,230,.9)'; s.lineWidth = 5;
-  for (let i = 0; i < 3; i++) { s.beginPath(); s.arc(cx, 400 + i * 22, 90 - i * 6, 0.2 * Math.PI, 0.8 * Math.PI); s.stroke(); }
+  const gold = layer(s => {
+    s.beginPath();                                              // kireeta mukuta
+    s.moveTo(cx - 72, 262); s.lineTo(cx + 72, 262); s.lineTo(cx + 52, 150); s.lineTo(cx + 30, 70);
+    s.lineTo(cx, 20); s.lineTo(cx - 30, 70); s.lineTo(cx - 52, 150); s.closePath(); s.fill();
+    s.lineWidth = 7;
+    for (let i = 0; i < 3; i++) { s.beginPath(); s.arc(cx, 400 + i * 22, 90 - i * 6, 0.2 * Math.PI, 0.8 * Math.PI); s.stroke(); }
+    for (const a of arms) {                                     // armbands and bracelets
+      s.lineWidth = 9;
+      const bx = a.sx + (a.ex - a.sx) * 0.55, by = a.sy + (a.ey - a.sy) * 0.55;
+      s.beginPath(); s.arc(bx, by, 14 - a.t * 2, 0, Math.PI * 2); s.stroke();
+      s.beginPath(); s.arc(a.hx + (a.ex - a.hx) * 0.15, a.hy + (a.ey - a.hy) * 0.15, 12, 0, Math.PI * 2); s.stroke();
+    }
+    s.lineWidth = 6; s.beginPath(); s.moveTo(cx - 92, 718); s.lineTo(cx + 92, 718); s.stroke();   // waist belt
+    s.beginPath(); s.arc(cx - 66, 330, 13, 0, Math.PI * 2); s.arc(cx + 66, 330, 13, 0, Math.PI * 2); s.fill(); // makara kundala
+  }, [[0, '#fff6d6'], [0.3, '#f6cf6a'], [0.7, '#d79a2b'], [1, '#a8661a']]);
+
+  const shape = makeCanvas(W, H), s = shape.getContext('2d');
+  s.drawImage(skin, 0, 0); s.drawImage(cloth, 0, 0); s.drawImage(gold, 0, 0);
+  s.lineCap = 'round';
+  // vanamala, the long garland of forest flowers
+  s.strokeStyle = 'rgba(255,240,220,.85)'; s.lineWidth = 9; s.setLineDash([2, 16]);
+  s.beginPath(); s.moveTo(cx - 100, shY + 10); s.quadraticCurveTo(cx, 1050, cx + 100, shY + 10); s.stroke();
+  s.setLineDash([]);
+  // urdhva pundra tilak
   s.lineWidth = 4; s.strokeStyle = '#fff8e6';
   s.beginPath(); s.moveTo(cx - 14, 236); s.quadraticCurveTo(cx, 285, cx + 14, 236); s.stroke();
   s.strokeStyle = '#ff5a3c'; s.beginPath(); s.moveTo(cx, 240); s.lineTo(cx, 270); s.stroke();
-  // vanamala, the long garland
-  s.strokeStyle = 'rgba(255,220,150,.75)'; s.lineWidth = 9;
-  s.beginPath(); s.moveTo(cx - 100, shY + 10); s.quadraticCurveTo(cx, 1050, cx + 100, shY + 10); s.stroke();
+  for (const a of arms) if (a.main) {
+    const kind = a.k === 2 ? (a.side > 0 ? 'chakra' : 'shankha') : (a.side > 0 ? 'padma' : 'gada');
+    drawSymbol(s, { kind, x: a.hx, y: a.hy - (a.k === 2 ? 30 : 20) });
+  }
 
-  for (const sy of symbols) drawSymbol(s, sy);
-
-  // glow: draw blurred copy then the crisp figure
-  x.filter = 'blur(18px)'; x.globalAlpha = 0.9; x.drawImage(shape, 0, 0);
-  x.filter = 'none'; x.globalAlpha = 1; x.drawImage(shape, 0, 0);
+  // golden aura: a blurred gold copy of the silhouette behind the figure
+  const aura = makeCanvas(W, H), ax = aura.getContext('2d');
+  ax.drawImage(shape, 0, 0); ax.globalCompositeOperation = 'source-in';
+  ax.fillStyle = '#ffc861'; ax.fillRect(0, 0, W, H);
+  const c = makeCanvas(W, H), x = c.getContext('2d');
+  x.filter = 'blur(22px)'; x.drawImage(aura, 0, 0); x.drawImage(aura, 0, 0);
+  x.filter = 'none'; x.drawImage(shape, 0, 0);
   return { canvas: c, blend: 'source-over', headY: 300 / H, builtIn: true };
 }
 
@@ -301,21 +408,41 @@ function drawCosmos(W, H, t) {
   c.globalCompositeOperation = 'source-over'; c.globalAlpha = 1; c.filter = 'none';
   c.fillStyle = '#02030a'; c.fillRect(0, 0, W, H);
 
-  const D = Math.hypot(W, H) * 1.25;
-  c.save(); c.translate(W * 0.5, H * 0.4); c.rotate(t * 0.006); c.globalAlpha = 0.95;
-  c.drawImage(nebula, -D / 2, -D / 2, D, D); c.restore();
-
-  for (const s of stars) {
-    c.globalAlpha = s.a * (0.55 + 0.45 * Math.sin(t * s.f + s.p));
-    c.fillStyle = s.warm ? '#ffe2b0' : '#dfe9ff';
-    c.beginPath(); c.arc(s.x, s.y, s.r * Math.max(1, W / 1400), 0, Math.PI * 2); c.fill();
-  }
-  c.globalAlpha = 1;
-
   const r = deityRect(W, H);
   const hx = r.x + r.w / 2, hy = r.y + r.h * deity.headY;
   const R = r.h * 0.2;
 
+  if (skyArt) drawSkyArt(c, W, H);
+  else {
+    const D = Math.hypot(W, H) * 1.25;
+    c.save(); c.translate(W * 0.5, H * 0.4); c.rotate(t * 0.006); c.globalAlpha = 0.95;
+    c.drawImage(nebula, -D / 2, -D / 2, D, D); c.restore();
+
+    for (const s of stars) {
+      c.globalAlpha = s.a * (0.55 + 0.45 * Math.sin(t * s.f + s.p));
+      c.fillStyle = s.warm ? '#ffe2b0' : '#dfe9ff';
+      c.beginPath(); c.arc(s.x, s.y, s.r * Math.max(1, W / 1400), 0, Math.PI * 2); c.fill();
+    }
+    c.globalAlpha = 1;
+    drawPlanets(c, W, H, hx, hy);
+  }
+
+  if (settings.figure) drawFigureLayer(c, r, hx, hy, R, W, H, t);
+  if (settings.embers) drawEmbers(c, W, H, t);
+
+  // horizon haze so the sky meets the skyline softly
+  const hz = c.createLinearGradient(0, H * 0.45, 0, H);
+  hz.addColorStop(0, 'rgba(30,60,90,0)'); hz.addColorStop(1, `rgba(120,110,120,${skyArt ? 0.18 : 0.35})`);
+  c.fillStyle = hz; c.fillRect(0, 0, W, H);
+
+  // keep only the sky
+  c.globalCompositeOperation = 'destination-in';
+  c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high';
+  c.drawImage(maskCanvas, 0, 0, W, H);
+  c.globalCompositeOperation = 'source-over';
+}
+
+function drawFigureLayer(c, r, hx, hy, R, W, H, t) {
   // warm light pouring from the figure
   const glow = c.createRadialGradient(hx, hy, 0, hx, hy, R * 5);
   glow.addColorStop(0, `rgba(255,214,140,${0.55 * settings.glow})`);
@@ -331,17 +458,6 @@ function drawCosmos(W, H, t) {
   c.globalAlpha = 0.96;
   c.drawImage(deity.canvas, r.x, r.y, r.w, r.h);
   c.restore();
-
-  // horizon haze so the sky meets the skyline softly
-  const hz = c.createLinearGradient(0, H * 0.45, 0, H);
-  hz.addColorStop(0, 'rgba(30,60,90,0)'); hz.addColorStop(1, 'rgba(120,110,120,.35)');
-  c.fillStyle = hz; c.fillRect(0, 0, W, H);
-
-  // keep only the sky
-  c.globalCompositeOperation = 'destination-in';
-  c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high';
-  c.drawImage(maskCanvas, 0, 0, W, H);
-  c.globalCompositeOperation = 'source-over';
 }
 
 // Gargantua: a black disc with a lensed photon ring and a flat accretion disc, used as the halo
@@ -396,13 +512,19 @@ function render() {
   // cool, cinematic grade on the ground so it sits under a cosmic sky
   vctx.globalCompositeOperation = 'multiply';
   vctx.globalAlpha = k * 0.85;
-  vctx.fillStyle = 'rgb(176,188,220)'; vctx.fillRect(0, 0, W, H);
-  // gold light spill from the figure onto the world
-  const r = deityRect(W, H);
-  const spill = vctx.createRadialGradient(r.x + r.w / 2, r.y + r.h * 0.4, 0, r.x + r.w / 2, r.y + r.h * 0.4, Math.max(W, H));
-  spill.addColorStop(0, `rgba(255,190,110,${0.35 * settings.glow})`); spill.addColorStop(1, 'rgba(0,0,0,0)');
-  vctx.globalCompositeOperation = 'screen'; vctx.globalAlpha = k;
-  vctx.fillStyle = spill; vctx.fillRect(0, 0, W, H);
+  vctx.fillStyle = skyArt ? skyArt.tint : 'rgb(176,188,220)'; vctx.fillRect(0, 0, W, H);
+  if (settings.figure) {
+    // gold light spill from the figure onto the world
+    const r = deityRect(W, H);
+    const spill = vctx.createRadialGradient(r.x + r.w / 2, r.y + r.h * 0.4, 0, r.x + r.w / 2, r.y + r.h * 0.4, Math.max(W, H));
+    spill.addColorStop(0, `rgba(255,190,110,${0.35 * settings.glow})`); spill.addColorStop(1, 'rgba(0,0,0,0)');
+    vctx.globalCompositeOperation = 'screen'; vctx.globalAlpha = k;
+    vctx.fillStyle = spill; vctx.fillRect(0, 0, W, H);
+  }
+
+  vctx.globalCompositeOperation = 'source-over'; vctx.globalAlpha = k;
+  vctx.imageSmoothingEnabled = true;
+  vctx.drawImage(darkMask, 0, 0, W, H);
 
   drawCosmos(W, H, t);
   vctx.globalCompositeOperation = 'source-over'; vctx.globalAlpha = k;
@@ -506,16 +628,64 @@ async function kvGet(k) {
   return new Promise((res, rej) => { const r = db.transaction('kv').objectStore('kv').get(k); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
 }
 
-async function initDeity() {
+// ---------- presets: art generated for the app, in assets/ ----------
+const PRESETS = [
+  { id: 'vishwaroop', label: 'Vishwaroop', figure: 'assets/figure-vishwaroop.webp', headY: 0.19, halo: true },
+  { id: 'blackhole', label: 'Black hole', figure: 'assets/figure-vishwaroop-gargantua.webp', headY: 0.3, halo: false },
+  { id: 'interstellar', label: 'Interstellar', sky: 'assets/sky-gargantua.webp' },
+  { id: 'ksheer-sagar', label: 'Ksheer Sagar', sky: 'assets/sky-cosmic-ocean.webp' },
+  { id: 'anantashayana', label: 'Anantashayana', sky: 'assets/sky-anantashayana.webp' },
+  { id: 'divine-foot', label: 'Divine foot', sky: 'assets/sky-divine-foot.webp' },
+  { id: 'drawn', label: 'Drawn', halo: true },
+];
+const thumbFor = p => (p.figure || p.sky || '').replace('.webp', '-thumb.jpg');
+const imageCache = new Map();
+function loadUrl(url) {
+  if (!imageCache.has(url)) imageCache.set(url, new Promise((res, rej) => {
+    const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = url;
+  }));
+  return imageCache.get(url);
+}
+
+async function applyPreset(id) {
+  const p = PRESETS.find(q => q.id === id) || PRESETS[0];
+  document.querySelectorAll('#presets button').forEach(b => b.classList.toggle('on', b.dataset.id === p.id));
+  try { localStorage.setItem('preset', p.id); } catch (e) {}
+  if (p.sky) {
+    setSkyArt(prepareSkyArt(await loadUrl(p.sky)));
+  } else {
+    deity = p.figure ? { ...prepareDeity(await loadUrl(p.figure)), headY: p.headY } : buildFigure();
+    setSkyArt(null);
+    settings.halo = p.halo; $('#halo').checked = p.halo;
+  }
+}
+
+function buildPresetBar() {
+  const bar = $('#presets');
+  for (const p of PRESETS) {
+    const b = document.createElement('button');
+    b.dataset.id = p.id;
+    b.innerHTML = (p.figure || p.sky ? `<img src="${thumbFor(p)}" alt="">` : '<span class="drawn">✦</span>') + `<span>${p.label}</span>`;
+    b.onclick = async () => {
+      await applyPreset(p.id);
+      try { await kvSet('deity', null); await kvSet('skyart', null); } catch (e) {}
+    };
+    bar.appendChild(b);
+  }
+}
+
+// a picture the user loaded wins over the preset, so it survives a reload
+async function initArt() {
+  buildPresetBar();
+  let start = 'vishwaroop';
+  try { start = localStorage.getItem('preset') || start; } catch (e) {}
+  await applyPreset(start);
   try {
-    const saved = await kvGet('deity');
-    if (saved) { deity = prepareDeity(await loadImageFile(saved)); return; }
-  } catch (e) { /* storage unavailable, fall through */ }
-  try {
-    const r = await fetch('vishnu.png');
-    if (r.ok) { deity = prepareDeity(await loadImageFile(await r.blob())); return; }
-  } catch (e) { /* no bundled art */ }
-  deity = buildFigure();
+    const d = await kvGet('deity');
+    if (d) { deity = prepareDeity(await loadImageFile(d)); setSkyArt(null); }
+    const a = await kvGet('skyart');
+    if (a) setSkyArt(prepareSkyArt(await loadImageFile(a)));
+  } catch (e) { /* storage unavailable */ }
 }
 
 // ---------- capture ----------
@@ -552,15 +722,21 @@ view.addEventListener('pointermove', e => {
   const cur = { x: e.clientX, y: e.clientY };
   if (pointers.size === 1) {
     const s = displayScale();
-    settings.x += (cur.x - prev.x) / (view.width * s);
-    settings.y += (cur.y - prev.y) / (view.height * s);
+    const dx = (cur.x - prev.x) / s, dy = (cur.y - prev.y) / s;
+    if (settings.figure) { settings.x += dx / view.width; settings.y += dy / view.height; }
+    else if (skyArt) {
+      const r = skyArtRect(view.width, view.height), clamp = v => Math.min(1, Math.max(0, v));
+      if (Math.abs(view.width - r.w) > 1) settings.artX = clamp(settings.artX + dx / (view.width - r.w));
+      if (Math.abs(view.height - r.h) > 1) settings.artY = clamp(settings.artY + dy / (view.height - r.h));
+    }
   } else if (pointers.size === 2) {
     pointers.set(e.pointerId, cur);
     const [a, b] = [...pointers.values()];
     const dist = Math.hypot(a.x - b.x, a.y - b.y);
-    if (!pinchStart) pinchStart = { dist, size: settings.size };
-    settings.size = Math.min(3, Math.max(0.3, pinchStart.size * dist / pinchStart.dist));
-    $('#size').value = settings.size;
+    const key = settings.figure ? 'size' : 'artScale';
+    if (!pinchStart) pinchStart = { dist, size: settings[key] };
+    settings[key] = Math.min(4, Math.max(settings.figure ? 0.3 : 1, pinchStart.size * dist / pinchStart.dist));
+    if (settings.figure) $('#size').value = settings.size;
   }
   pointers.set(e.pointerId, cur);
 });
@@ -577,6 +753,24 @@ $('#shutter').onclick = capture;
 $('#gear').onclick = () => $('#panel').classList.toggle('open');
 for (const id of ['intensity', 'size', 'glow']) $('#' + id).oninput = e => (settings[id] = +e.target.value);
 $('#halo').onchange = e => (settings.halo = e.target.checked);
+$('#figure').onchange = e => (settings.figure = e.target.checked);
+$('#embers').onchange = e => (settings.embers = e.target.checked);
+function setSkyArt(art) {
+  skyArt = art;
+  Object.assign(settings, { artX: 0.5, artY: 0.12, artScale: 1, figure: !art });
+  $('#figure').checked = settings.figure;
+  $('#hint').textContent = settings.figure ? 'Drag to move · pinch to resize' : 'Drag to move the sky · pinch to zoom';
+}
+$('#pickArt').onclick = () => $('#artInput').click();
+$('#artInput').onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  setSkyArt(prepareSkyArt(await loadImageFile(f)));
+  try { await kvSet('skyart', f); } catch (err) { /* keep for this session only */ }
+  toast('Sky art loaded');
+};
+$('#clearArt').onclick = async () => { setSkyArt(null); try { await kvSet('skyart', null); } catch (e) {} };
+$('#figure').addEventListener('change', () => setHint());
+function setHint() { $('#hint').textContent = settings.figure ? 'Drag to move · pinch to resize' : 'Drag to move the sky · pinch to zoom'; }
 $('#showMask').onchange = e => (settings.showMask = e.target.checked);
 $('#pickDeity').onclick = () => $('#deityInput').click();
 $('#deityInput').onchange = async e => {
@@ -585,12 +779,15 @@ $('#deityInput').onchange = async e => {
   try { await kvSet('deity', f); } catch (err) { /* keep for this session only */ }
   toast('Vishnu image loaded');
 };
-$('#resetDeity').onclick = async () => { deity = buildFigure(); try { await kvSet('deity', null); } catch (e) {} };
 document.addEventListener('click', e => { if (!e.target.closest('#panel, #gear')) $('#panel').classList.remove('open'); });
 
 // for testing in a browser without a camera: ?photo=<url>
 const testPhoto = new URLSearchParams(location.search).get('photo');
-initDeity().then(async () => {
+const testArt = new URLSearchParams(location.search).get('art');
+const testPreset = new URLSearchParams(location.search).get('preset');
+initArt().then(async () => {
+  if (testPreset) await applyPreset(testPreset);
+  if (testArt) setSkyArt(prepareSkyArt(await loadImageFile(await (await fetch(testArt)).blob())));
   if (testPhoto) { const r = await fetch(testPhoto); await usePhoto(await r.blob()); }
 });
 requestAnimationFrame(render);

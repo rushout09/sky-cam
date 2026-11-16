@@ -44,6 +44,16 @@
   #gear { position: fixed; top: calc(10px + env(safe-area-inset-top)); right: 10px; z-index: 3; }
   #hint { position: fixed; top: calc(14px + env(safe-area-inset-top)); left: 14px; z-index: 3; font-size: 12px;
     opacity: .75; max-width: 60vw; text-shadow: 0 1px 3px #000; }
+  #presets { position: fixed; left: 0; right: 0; bottom: calc(112px + env(safe-area-inset-bottom)); z-index: 3;
+    display: flex; gap: 10px; overflow-x: auto; padding: 0 14px; scrollbar-width: none; }
+  #presets::-webkit-scrollbar { display: none; }
+  #presets button { flex: 0 0 auto; width: 66px; padding: 0; border: 0; background: none; color: #f6ead0;
+    font-size: 11px; display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; opacity: .75; }
+  #presets button img, #presets .drawn { width: 54px; height: 54px; border-radius: 50%; object-fit: cover;
+    border: 2px solid rgba(255,255,255,.35); display: grid; place-items: center; background: #0a0b1a; font-size: 22px; color: var(--gold); }
+  #presets button.on { opacity: 1; }
+  #presets button.on img, #presets button.on .drawn { border-color: var(--gold); box-shadow: 0 0 12px rgba(243,199,107,.8); }
+  #presets button span { text-shadow: 0 1px 3px #000; white-space: nowrap; }
   #toast { position: fixed; left: 50%; bottom: 130px; transform: translateX(-50%); z-index: 6; display: none;
     background: rgba(0,0,0,.75); padding: 8px 16px; border-radius: 999px; font-size: 13px; }
 </style>
@@ -66,11 +76,15 @@
   <label>Vishnu size</label><input id="size" type="range" min="0.4" max="2.4" step="0.01" value="0.9">
   <label>Glow</label><input id="glow" type="range" min="0" max="1" step="0.01" value="0.7">
   <div class="row"><span>Gargantua halo</span><input id="halo" type="checkbox" checked></div>
+  <div class="row"><span>Vishnu figure</span><input id="figure" type="checkbox" checked></div>
+  <div class="row"><span>Golden embers</span><input id="embers" type="checkbox" checked></div>
   <div class="row"><span>Show sky mask</span><input id="showMask" type="checkbox"></div>
+  <button class="btn" id="pickArt">Load sky art</button>
+  <button class="btn" id="clearArt">Clear sky art</button>
   <button class="btn" id="pickDeity">Load Vishnu image</button>
-  <button class="btn" id="resetDeity">Use built-in figure</button>
 </div>
 
+<div id="presets"></div>
 <div id="bar">
   <button class="round" id="photoBtn" title="Open a photo">🖼</button>
   <button id="shutter" title="Capture"></button>
@@ -80,6 +94,7 @@
 
 <input type="file" id="photoInput" accept="image/*" hidden>
 <input type="file" id="deityInput" accept="image/*" hidden>
+<input type="file" id="artInput" accept="image/*" hidden>
 <script src="app.js"></script>
 </body>
 </html>
