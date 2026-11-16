@@ -1,0 +1,9 @@
+{
+  "name": "Vishwaroop Sky",
+  "short_name": "Vishwaroop",
+  "start_url": ".",
+  "display": "fullscreen",
+  "orientation": "any",
+  "background_color": "#02030a",
+  "theme_color": "#02030a"
+}
