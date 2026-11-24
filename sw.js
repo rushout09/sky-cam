@@ -1,6 +1,6 @@
 // Sky Cam service worker: keeps the app shell offline and lets new deploys show up.
 // Bump VERSION whenever the precache list changes; old caches are deleted on activate.
-const VERSION = 'v1';
+const VERSION = 'v2';
 const SHELL = `skycam-shell-${VERSION}`;
 const MEDIA = `skycam-media-${VERSION}`;
 

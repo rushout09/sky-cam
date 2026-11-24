@@ -7,13 +7,13 @@ const view = $('#view');
 const vctx = view.getContext('2d');
 const video = $('#video');
 
-const settings = { intensity: 0.95, size: 0.9, glow: 0.7, halo: true, showMask: false, x: 0.5, y: 0.97,
+const settings = { intensity: 0.95, size: 0.9, glow: 0.7, showMask: false, x: 0.5, y: 0.97,
   object: true, embers: true, artX: 0.5, artY: 0.12, artScale: 1 };
 
 let source = null;          // { el, w, h, still }
 let facing = 'environment';
 let stream = null;
-let deity = null;           // optional figure in the cosmos: { canvas, blend, headY }, headY = halo centre as a fraction of height
+let deity = null;           // optional figure in the cosmos: { canvas, blend, headY }, headY = glow centre as a fraction of height
 let maskPrev = null;
 let stillMaskDirty = true;
 
@@ -277,7 +277,7 @@ function resize(W, H) {
   maskPrev = null;
 }
 
-// Where the figure (or, with no figure, the black hole alone) sits in the frame
+// Where the figure sits in the frame
 function deityRect(W, H) {
   const h = H * settings.size, w = h * (deity ? deity.canvas.width / deity.canvas.height : 0.6);
   const breathe = 1 + Math.sin(performance.now() / 2400) * 0.006;
@@ -333,48 +333,11 @@ function drawFigureLayer(c, r, hx, hy, R, W, H, t) {
   c.globalCompositeOperation = 'screen'; c.fillStyle = glow; c.fillRect(0, 0, W, H);
   c.globalCompositeOperation = 'source-over';
 
-  if (settings.halo) drawGargantua(c, hx, hy, R, t);
-
   if (!deity) return;
   c.save();
   c.globalCompositeOperation = deity.blend;
   c.globalAlpha = 0.96;
   c.drawImage(deity.canvas, r.x, r.y, r.w, r.h);
-  c.restore();
-}
-
-// Gargantua: a black disc with a lensed photon ring and a flat accretion disc, used as the halo
-function drawGargantua(c, x, y, R, t) {
-  c.save(); c.translate(x, y);
-  // outer lensed light
-  const lens = c.createRadialGradient(0, 0, R * 0.9, 0, 0, R * 2.1);
-  lens.addColorStop(0, `rgba(255,236,190,${0.9 * settings.glow + 0.1})`);
-  lens.addColorStop(0.18, 'rgba(255,180,90,.55)');
-  lens.addColorStop(1, 'rgba(255,120,40,0)');
-  c.globalCompositeOperation = 'screen'; c.fillStyle = lens;
-  c.beginPath(); c.arc(0, 0, R * 2.1, 0, Math.PI * 2); c.fill();
-  // accretion disc, back half
-  c.save(); c.scale(1, 0.13);
-  const disc = c.createRadialGradient(0, 0, R * 1.05, 0, 0, R * 3.4);
-  disc.addColorStop(0, 'rgba(255,245,215,1)'); disc.addColorStop(0.3, 'rgba(255,170,80,.75)'); disc.addColorStop(1, 'rgba(255,90,20,0)');
-  c.fillStyle = disc; c.beginPath(); c.arc(0, 0, R * 3.4, Math.PI, Math.PI * 2); c.fill();
-  c.restore();
-  // event horizon
-  c.globalCompositeOperation = 'source-over'; c.fillStyle = '#000';
-  c.beginPath(); c.arc(0, 0, R, 0, Math.PI * 2); c.fill();
-  // photon ring
-  c.globalCompositeOperation = 'screen';
-  c.strokeStyle = 'rgba(255,240,200,.95)'; c.lineWidth = Math.max(1.5, R * 0.035);
-  c.beginPath(); c.arc(0, 0, R * 1.03, 0, Math.PI * 2); c.stroke();
-  // slowly turning spokes on the ring
-  c.rotate(t * 0.15); c.strokeStyle = 'rgba(255,215,140,.35)'; c.lineWidth = Math.max(1, R * 0.012);
-  for (let i = 0; i < 24; i++) { const a = i * Math.PI / 12; c.beginPath(); c.moveTo(Math.cos(a) * R * 1.12, Math.sin(a) * R * 1.12); c.lineTo(Math.cos(a) * R * 1.5, Math.sin(a) * R * 1.5); c.stroke(); }
-  c.rotate(-t * 0.15);
-  // accretion disc, front half crossing the black disc
-  c.scale(1, 0.13);
-  const front = c.createRadialGradient(0, 0, R * 0.2, 0, 0, R * 3.4);
-  front.addColorStop(0, 'rgba(255,250,230,1)'); front.addColorStop(0.45, 'rgba(255,180,90,.8)'); front.addColorStop(1, 'rgba(255,90,20,0)');
-  c.fillStyle = front; c.beginPath(); c.arc(0, 0, R * 3.4, 0, Math.PI); c.fill();
   c.restore();
 }
 
@@ -516,9 +479,9 @@ async function kvGet(k) {
 }
 
 // ---------- skies ----------
-// cosmos: the animated nebula; halo: a black hole; figure: a cut-out painted on top; sky: a full painting
+// cosmos: the animated nebula; figure: a cut-out painted on top; sky: a full painting
 const PRESETS = [
-  { id: 'cosmos', label: 'Cosmos', cosmos: true, halo: true, embers: true },
+  { id: 'cosmos', label: 'Cosmos', cosmos: true, embers: true },
   { id: 'blackhole', label: 'Black hole', sky: 'assets/sky-blackhole.webp' },
   { id: 'milkyway', label: 'Milky Way', sky: 'assets/sky-milkyway.webp' },
   { id: 'aurora', label: 'Aurora', sky: 'assets/sky-aurora.webp' },
@@ -529,8 +492,8 @@ const PRESETS = [
   { id: 'starry-night', label: 'Starry Night', sky: 'assets/sky-starry-night.webp' },
   { id: 'storm', label: 'Storm', sky: 'assets/sky-storm.webp' },
   { id: 'pastel', label: 'Pastel', sky: 'assets/sky-pastel.webp' },
-  { id: 'vishwaroop', label: 'Vishwaroop', cosmos: true, figure: 'assets/figure-vishwaroop.webp', headY: 0.19, halo: true, embers: true },
-  { id: 'vishnu-blackhole', label: 'Vishnu halo', cosmos: true, figure: 'assets/figure-vishwaroop-gargantua.webp', headY: 0.3, halo: false, embers: true },
+  { id: 'vishwaroop', label: 'Vishwaroop', cosmos: true, figure: 'assets/figure-vishwaroop.webp', headY: 0.19, embers: true },
+  { id: 'vishnu-blackhole', label: 'Vishnu halo', cosmos: true, figure: 'assets/figure-vishwaroop-gargantua.webp', headY: 0.3, embers: true },
   { id: 'vishnu-space', label: 'Vishnu space', sky: 'assets/sky-gargantua.webp', embers: true },
   { id: 'ksheer-sagar', label: 'Ksheer Sagar', sky: 'assets/sky-cosmic-ocean.webp', embers: true },
   { id: 'anantashayana', label: 'Anantashayana', sky: 'assets/sky-anantashayana.webp', embers: true },
@@ -571,7 +534,6 @@ async function applyPreset(id) {
     deity = p.figure ? { ...prepareDeity(await loadUrl(p.figure)), headY: p.headY } : null;
     setSkyArt(null);
     settings.object = true;
-    settings.halo = !!p.halo;
   }
   settings.embers = !!p.embers;
   syncControls();
@@ -584,7 +546,7 @@ async function applyUserImage(u) {
   markSelected(u.id);
   if (fig.transparent) {
     deity = fig; setSkyArt(null);
-    Object.assign(settings, { object: true, halo: false, embers: true });
+    Object.assign(settings, { object: true, embers: true });
   } else {
     setSkyArt(prepareSkyArt(im));
     Object.assign(settings, { object: false, embers: false });
@@ -593,7 +555,6 @@ async function applyUserImage(u) {
 }
 
 function syncControls() {
-  $('#halo').checked = settings.halo;
   $('#embers').checked = settings.embers;
   setHint();
 }
@@ -731,7 +692,6 @@ $('#flipBtn').onclick = () => { facing = facing === 'environment' ? 'user' : 'en
 $('#shutter').onclick = capture;
 $('#gear').onclick = () => $('#panel').classList.toggle('open');
 for (const id of ['intensity', 'size', 'glow']) $('#' + id).oninput = e => (settings[id] = +e.target.value);
-$('#halo').onchange = e => (settings.halo = e.target.checked);
 $('#embers').onchange = e => (settings.embers = e.target.checked);
 $('#showMask').onchange = e => (settings.showMask = e.target.checked);
 document.addEventListener('click', e => { if (!e.target.closest('#panel, #gear')) $('#panel').classList.remove('open'); });
